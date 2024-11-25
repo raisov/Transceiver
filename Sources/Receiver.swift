@@ -51,7 +51,7 @@ public class Receiver {
         if let interface = interface {
             addresses.append(contentsOf: interface.addresses.map{$0.with(port: port)})
         } else {
-            addresses.append(contentsOf: Interfaces().flatMap{$0.ip4}.map{$0.with(port: port)})
+            addresses.append(contentsOf: Interfaces.list().flatMap{$0.ip4}.map{$0.with(port: port)})
             addresses.append(contentsOf: try getInternetAddresses(port: port))
         }
         try self.init(port: port, addresses)
@@ -76,7 +76,7 @@ public class Receiver {
             if let interface = interface {
                 interfaces.append(interface)
             } else {
-                interfaces.append(contentsOf: Interfaces())
+                interfaces.append(contentsOf: Interfaces.list())
             }
 
             let socket = try Socket(Int32(source.handle))

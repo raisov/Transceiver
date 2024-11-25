@@ -68,7 +68,7 @@ public class Transmitter {
 
         func broadcast() -> Bool {
             guard let ip4local = localAddress.ip as? in_addr else {return false}
-            guard let brd = (Interfaces().first{$0.ip4.contains(ip4local)})?.broadcast else {return false}
+            guard let brd = (Interfaces.list().first{$0.ip4.contains(ip4local)})?.broadcast else {return false}
             guard let ip4 = address.ip as? in_addr else {return false}
             return ip4 == brd || ip4.s_addr == INADDR_BROADCAST
         }
@@ -76,7 +76,7 @@ public class Transmitter {
         if multicast {
             let socket = try Socket(family: SocketAddressFamily(family), type: .datagram)
             if let ip4 = localAddress.ip as? in_addr {
-                let index = (Interfaces().first{$0.ip4.contains(ip4)})?.index ?? 0
+                let index = (Interfaces.list().first{$0.ip4.contains(ip4)})?.index ?? 0
                 try self.socket.enable(option: IP_MULTICAST_LOOP, level: IPPROTO_IP)
                 try self.socket.set(option: IP_MULTICAST_IFINDEX, level: IPPROTO_IP, value: index)
             }

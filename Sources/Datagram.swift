@@ -110,12 +110,18 @@ public struct Datagram {
     }
 
     /// Datagram sender address.
-    public var sender: InternetAddress? {
-        return self.msg.msg_name.assumingMemoryBound(to: sockaddr.self).internetAddress
-    }
+    public var sender: sockaddr_storage? {
+        if let sin = self.msg.msg_name.assumingMemoryBound(to: sockaddr.self).in {
+            return sockaddr_storage(sin)
+        }
+        if let sin6 = self.msg.msg_name.assumingMemoryBound(to: sockaddr.self).in6 {
+            return sockaddr_storage(sin6)
+        }
+        return nil
+ }
 
-    /// Recipient address, broadcast or multicast group address.
-    public var destination: IPAddress? {
+    /// Recipient IP address, broadcast or multicast group address.
+    public var destination4: in_addr? {
         for p in self.msg.ancillaries {
             if p.pointee.cmsg_level == IPPROTO_IP && p.pointee.cmsg_type == IP_RECVDSTADDR {
                 return p.advanced(by: 1).withMemoryRebound(to: in_addr.self, capacity: 1) {
@@ -127,12 +133,19 @@ public struct Datagram {
                     $0.pointee.ipi_addr
                 }
             }
+        }
+        return nil
+    }
+    
+    /// Recipient IPv6 address,  or multicast group address.
+    public var destination6: in6_addr? {
+        for p in self.msg.ancillaries {
             if p.pointee.cmsg_level == IPPROTO_IPV6 && p.pointee.cmsg_type == IPV6_2292PKTINFO {
                 return p.advanced(by: 1).withMemoryRebound(to: in6_pktinfo.self, capacity: 1) {
                     $0.pointee.ipi6_addr
                 }
             }
-       }
+        }
         return nil
     }
 
@@ -158,7 +171,7 @@ public struct Datagram {
             }
             return 0
         }()
-        return Interfaces().first{$0.index == index}
+        return Interfaces.list().first{$0.index == index}
     }
 
     /// Sends a rеsponce to this datagram.
@@ -166,21 +179,18 @@ public struct Datagram {
     /// - Throws: SocketError
     public func reply(with data: Data) throws {
         let localAddress = self.socket.localAddress!
-        let family = type(of: localAddress.ip).family
         assert(self.sender != nil)
         guard let peer = self.sender else {return}
-        if family == .ip4 && localAddress.isWildcard || localAddress.isMulticast,
-            let interface = self.interface {
-            let replySocket = try Socket(family: SocketAddressFamily(family), type: .datagram)
-            switch family {
-            case .ip4:
-                try replySocket.set(option: IP_BOUND_IF, level: IPPROTO_IP, value: interface.index)
-            case .ip6:
-                try replySocket.set(option: IPV6_BOUND_IF, level: IPPROTO_IPV6, value: interface.index)
-            }
-            try replySocket.sendTo(peer, data: data)
+        if let interface, let sin = localAddress.in, sin.isWildcard || sin.isMulticast {
+            let replySocket = try Socket(family: .inet, type: .datagram)
+            try replySocket.set(option: IP_BOUND_IF, level: IPPROTO_IP, value: interface.index)
+            try peer.withSockaddrPointer { try replySocket.sendTo($0, data: data) }
+        } else if let interface, let sin6 = localAddress.in6, sin6.isWildcard || sin6.isMulticast {
+            let replySocket = try Socket(family: .inet6, type: .datagram)
+            try replySocket.set(option: IPV6_BOUND_IF, level: IPPROTO_IPV6, value: interface.index)
+            try peer.withSockaddrPointer { try replySocket.sendTo($0, data: data) }
         } else {
-            try self.socket.sendTo(peer, data: data)
+            try peer.withSockaddrPointer { try socket.sendTo($0, data: data) }
         }
     }
 }

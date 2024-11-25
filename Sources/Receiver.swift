@@ -26,9 +26,13 @@ public class Receiver {
                     let handle = Int32(source.handle)
                     let length = Int(source.data)
                     do {
-                        handler.dataDidRead(try Datagram(handle,
-                                                         maxDataLength: length,
-                                                         maxAncillaryLength: 72))
+                        handler.dataDidRead(
+                            try Datagram(
+                                handle,
+                                maxDataLength: length,
+                                maxAncillaryLength: 72
+                            )
+                        )
                     } catch {
                         handler.errorDidOccur(error)
                     }
@@ -47,11 +51,16 @@ public class Receiver {
     /// will be received; otherwise all datagrams addressed to selected port will be received on all
     /// available interfaces.
     public convenience init(port: UInt16,  interface: Interface? = nil) throws {
-        var addresses = [InternetAddress]()
-        if let interface = interface {
-            addresses.append(contentsOf: interface.addresses.map{$0.with(port: port)})
+        var addresses = [sockaddr_storage]()
+        if let interface {
+            addresses.append(
+                contentsOf: interface.ip4.map { sockaddr_storage($0.with(port: port)) }
+            )
+            addresses.append(
+                contentsOf: interface.ip6.map { sockaddr_storage($0.with(port: port)) }
+            )
         } else {
-            addresses.append(contentsOf: Interfaces.list().flatMap{$0.ip4}.map{$0.with(port: port)})
+//            addresses.append(contentsOf: Interfaces.list().flatMap{$0.ip4}.map{$0.with(port: port)})
             addresses.append(contentsOf: try getInternetAddresses(port: port))
         }
         try self.init(port: port, addresses)
@@ -63,30 +72,42 @@ public class Receiver {
     ///     - address: IPv4 or IPv6 multicast group address to join
     ///     - interface: interface used for receiving;
     ///       when omitted, operating system select default interface.
-    public convenience init(port: UInt16, multicast address: String, interface: Interface? = nil) throws {
+    public convenience init(
+        port: UInt16,
+        multicast address: String,
+        interface: Interface? = nil
+    ) throws {
         let addresses = try getInternetAddresses(for: address, port: port, numericHost: true)
-        assert(addresses.count == 1)
-        assert(addresses.first!.isMulticast)
-        try self.init(port: port, addresses)
-        assert(self.sources.count == 1)
-        if let source = self.sources.first,
-            let group = addresses.first?.ip
-        {
-            var interfaces = [Interface]()
-            if let interface = interface {
-                interfaces.append(interface)
-            } else {
-                interfaces.append(contentsOf: Interfaces.list())
-            }
-
-            let socket = try Socket(Int32(source.handle))
-            let family = type(of: group).family
-            try interfaces.filter{
-                guard $0.options.contains(.multicast) else {return false}
-                guard !$0.options.contains(.pointopoint) else {return false}
-                return !$0.addresses.filter{type(of: $0).family == family}.isEmpty
-            }.forEach {interface in
-                try socket.joinToMulticast(group, interfaceIndex: interface.index)
+        if addresses.isEmpty {
+            try self.init(port: port, [])
+        } else {
+            assert(addresses.count == 1)
+            let address = addresses[0]
+            try self.init(port: port, [address])
+            assert(addresses.count == 1)
+            if let source = sources.first {
+                assert(self.sources.count == 1)
+                let interfaces: [Interface] = {
+                    if let interface {
+                        [interface]
+                    } else {
+                        Array(Interfaces.list())
+                    }
+                }().filter {
+                    $0.options.contains(.multicast) && !$0.options.contains(.pointopoint)
+                }
+                
+                let socket = try Socket(Int32(source.handle))
+                
+                if let group = address.in?.sin_addr {
+                    try interfaces.filter { !$0.ip4.isEmpty }.forEach {interface in
+                        try socket.joinToMulticast(group, interfaceIndex: interface.index)
+                    }
+                } else if let group = address.in6?.sin6_addr {
+                    try interfaces.filter { !$0.ip6.isEmpty }.forEach {interface in
+                        try socket.joinToMulticast(group, interfaceIndex: interface.index)
+                    }
+                }
             }
         }
     }
@@ -120,7 +141,7 @@ public class Receiver {
         }.map { handle in
             let source = DispatchSource.makeReadSource(fileDescriptor: handle)
             source.setCancelHandler{ 
-                Darwin.close(Int32(source.handle))
+                close(Int32(source.handle))
             }
             return source
         }

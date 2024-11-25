@@ -64,12 +64,17 @@ public struct Datagram {
     public init(_ handle: Int32, maxDataLength: Int, maxAncillaryLength: Int = 256) throws {
         let prefixLength = maxAncillaryLength + MemoryLayout<sockaddr_storage>.size
         let capacity = prefixLength + maxDataLength
-        let buf_p = UnsafeMutableRawPointer.allocate(bytes: capacity, alignedTo: MemoryLayout<cmsghdr>.alignment)
-        // FIXME: when 9.3 will be available, replace with .allocate(bytesCount: needed, alignment: MemoryLayout<rt_msghdr>.alignment
-        self.buf = Data(bytesNoCopy: buf_p, count: capacity, deallocator: .custom {
-            $0.deallocate(bytes: $1, alignedTo: MemoryLayout<cmsghdr>.alignment)
-            // FIXME: when 9.3 will be available, replace with .deallocate()
-            })
+        let buf_p = UnsafeMutableRawPointer.allocate(
+            byteCount: capacity,
+            alignment: MemoryLayout<cmsghdr>.alignment
+        )
+        self.buf = Data(
+            bytesNoCopy: buf_p,
+            count: capacity,
+            deallocator: .custom { p, _ in
+                p.deallocate()
+            }
+        )
 
         self.iov = iovec(
             iov_base: buf_p.advanced(by: prefixLength),

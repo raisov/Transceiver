@@ -92,25 +92,34 @@ public class Receiver {
     }
 
     /// You don't need to know about it, although it does all the work...
-    private init(port: UInt16, _ addresses: [InternetAddress]) throws {
-        self.sources = try addresses.map {address in
-            let family = type(of: address.ip).family
-            let socket = try Socket(family: SocketAddressFamily(family), type: .datagram)
+    private init(port: UInt16, _ addresses: [sockaddr_storage]) throws {
+        self.sources = try addresses.compactMap {address -> Int32? in
+            guard let family = Socket.AddressFamily(
+                rawValue: numericCast(address.ss_family)
+            ) else { return nil }
+            guard family == .inet || family == .inet6 else { return nil }
+            
+            let socket = try Socket(family: family, type: .datagram)
             switch family {
-            case .ip4:
+            case .inet:
                 try socket.enable(option: IP_RECVDSTADDR, level: IPPROTO_IP) // 16
                 try socket.enable(option: IP_RECVPKTINFO, level: IPPROTO_IP) // 24
-            case .ip6:
+            case .inet6:
                 try socket.enable(option: IPV6_2292PKTINFO, level: IPPROTO_IPV6)
                 try socket.enable(option: IPV6_V6ONLY, level: IPPROTO_IPV6)
+            default:
+                fatalError()
             }
             try socket.enable(option: SO_REUSEADDR, level: SOL_SOCKET)
             try socket.enable(option: SO_REUSEPORT, level: SOL_SOCKET)
             socket.nonBlockingOperations = true
-            try socket.bind(address)
-            let handle = try socket.duplicateDescriptor()
+            try address.withSockaddrPointer {
+                try socket.bind($0)
+            }
+            return try socket.duplicateDescriptor()
+        }.map { handle in
             let source = DispatchSource.makeReadSource(fileDescriptor: handle)
-            source.setCancelHandler{[source] in
+            source.setCancelHandler{ 
                 Darwin.close(Int32(source.handle))
             }
             return source

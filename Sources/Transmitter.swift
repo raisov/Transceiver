@@ -44,78 +44,102 @@ public class Transmitter {
     ///     - interface: network interface through wich datagrams will be sent;
     ///       if omitted, default interface, selected by operating system, will be used.
     /// - Throws: SocketError, InternetAddressError
-    public init(host: String? = nil, port: UInt16,  interface: Interface? = nil) throws {
-        let address = try host.map{try getInternetAddresses(for: $0, port: port).first!} ??
-            (interface?.broadcast ?? in_addr(s_addr: INADDR_BROADCAST)).with(port: port)
-        let multicast = address.isMulticast
-        let family = type(of: address.ip).family
-        self.socket = try Socket(family: SocketAddressFamily(family), type: .datagram)
-        if let index = interface?.index ?? ((address as? sockaddr_in6)?.sin6_scope_id).map(numericCast) {
-            switch family {
-            case .ip4:
-                try self.socket.set(option: IP_BOUND_IF, level: IPPROTO_IP, value: index)
-            case .ip6:
-                try self.socket.set(option: IPV6_BOUND_IF, level: IPPROTO_IPV6, value: index)
-                if multicast {
-                   try self.socket.set(option: IPV6_MULTICAST_IF, level: IPPROTO_IPV6, value: index)
-                   try self.socket.enable(option: IPV6_MULTICAST_LOOP, level: IPPROTO_IPV6)
-                }
-            }
-        }
-        self.socket.nonBlockingOperations = true
-        try self.socket.connectTo(address)
-        let localAddress = self.socket.localAddress!
-
-        func broadcast() -> Bool {
-            guard let ip4local = localAddress.ip as? in_addr else {return false}
-            guard let brd = (Interfaces.list().first{$0.ip4.contains(ip4local)})?.broadcast else {return false}
-            guard let ip4 = address.ip as? in_addr else {return false}
-            return ip4 == brd || ip4.s_addr == INADDR_BROADCAST
-        }
-
-        if multicast {
-            let socket = try Socket(family: SocketAddressFamily(family), type: .datagram)
-            if let ip4 = localAddress.ip as? in_addr {
-                let index = (Interfaces.list().first{$0.ip4.contains(ip4)})?.index ?? 0
-                try self.socket.enable(option: IP_MULTICAST_LOOP, level: IPPROTO_IP)
-                try self.socket.set(option: IP_MULTICAST_IFINDEX, level: IPPROTO_IP, value: index)
-            }
-            try socket.enable(option: SO_REUSEADDR, level: SOL_SOCKET)
-            try socket.enable(option: SO_REUSEPORT, level: SOL_SOCKET)
-            try socket.bind(localAddress)
-            let handle = try socket.duplicateDescriptor()
-            self.source = DispatchSource.makeReadSource(fileDescriptor: handle)
-        } else if broadcast() {
-            try self.socket.enable(option: SO_BROADCAST, level: SOL_SOCKET)
-            let socket = try Socket(family: .inet, type: .datagram)
-            try socket.enable(option: SO_REUSEADDR, level: SOL_SOCKET)
-            try socket.enable(option: SO_REUSEPORT, level: SOL_SOCKET)
-            try socket.bind(localAddress)
-            let handle = try socket.duplicateDescriptor()
-            self.source = DispatchSource.makeReadSource(fileDescriptor: handle)
+    public init?(host: String? = nil, port: UInt16,  interface: Interface? = nil) throws {
+        guard let address = if let host {
+            try getInternetAddresses(for: host, port: port).first
         } else {
-            let handle = try self.socket.duplicateDescriptor()
-            self.source = DispatchSource.makeReadSource(fileDescriptor: handle)
+            sockaddr_storage((interface?.broadcast ?? in_addr.broadcast).with(port: port))
+        } else { return nil }
+        
+        if let sin = address.in {
+            self.socket = try Socket(family: .inet, type: .datagram)
+            if let index = interface?.index {
+                try self.socket.set(option: IP_BOUND_IF, level: IPPROTO_IP, value: index)
+            }
+        } else if let sin6 = address.in6 {
+            self.socket = try Socket(family: .inet6, type: .datagram)
+            if let index = interface?.index ?? Self.getInterfaceFromIPv6LocalScope(sin6)?.index {
+                try self.socket.set(option: IPV6_BOUND_IF, level: IPPROTO_IPV6, value: index)
+            }
+        } else {
+            return nil
         }
-        let socket = try Socket(numericCast(self.source.handle))
-        socket.nonBlockingOperations = true
-        switch family {
-        case .ip4:
-            try socket.enable(option: IP_RECVIF, level: IPPROTO_IP) // 32
-            try socket.enable(option: IP_RECVDSTADDR, level: IPPROTO_IP) // 16
-            try socket.enable(option: IP_RECVPKTINFO, level: IPPROTO_IP) // 24
-        case .ip6:
-            try socket.enable(option: IPV6_2292PKTINFO, level: IPPROTO_IPV6)
+        
+        self.socket.nonBlockingOperations = true
+        try address.withSockaddrPointer(try self.socket.connectTo)
+    
+    
+        guard let localAddress = self.socket.localAddress else { return nil }
+        
+        assert(address.in != nil && localAddress.in != nil ||
+               address.in6 != nil && localAddress.in6 != nil)
+        
+        var localSocket: Socket?
+        
+        if let local_sin = localAddress.in, let sin = address.in {
+            localSocket = try Socket(family: .inet, type: .datagram)
+            guard let interface = Self.findInterface(for: local_sin) else { return nil }
+            if sin.sin_addr == in_addr.broadcast || sin.sin_addr == interface.broadcast {
+                try socket.enable(option: SO_BROADCAST, level: SOL_SOCKET)
+                try localSocket!.enable(option: SO_REUSEADDR, level: SOL_SOCKET)
+                try localSocket!.enable(option: SO_REUSEPORT, level: SOL_SOCKET)
+                try localAddress.withSockaddrPointer(localSocket!.bind)
+            } else if local_sin.isMulticast {
+                try socket.enable(option: IP_MULTICAST_LOOP, level: IPPROTO_IP)
+                try socket.set(option: IP_MULTICAST_IFINDEX, level: IPPROTO_IP, value: interface.index)
+                try localSocket!.enable(option: SO_REUSEADDR, level: SOL_SOCKET)
+                try localSocket!.enable(option: SO_REUSEPORT, level: SOL_SOCKET)
+                try localAddress.withSockaddrPointer(localSocket!.bind)
+            }
+            try localSocket!.enable(option: IP_RECVIF, level: IPPROTO_IP) // 32
+            try localSocket!.enable(option: IP_RECVDSTADDR, level: IPPROTO_IP) // 16
+            try localSocket!.enable(option: IP_RECVPKTINFO, level: IPPROTO_IP) // 24
+        } else if let local_sin6 = localAddress.in, let sin6 = address.in {
+            localSocket = try Socket(family: .inet6, type: .datagram)
+            guard let interface = Self.findInterface(for: local_sin6) else { return nil }
+            if sin6.isMulticast {
+                try socket.set(option: IPV6_MULTICAST_IF, level: IPPROTO_IPV6, value: interface.index)
+                try socket.enable(option: IPV6_MULTICAST_LOOP, level: IPPROTO_IPV6)
+                try localSocket!.enable(option: SO_REUSEADDR, level: SOL_SOCKET)
+                try localSocket!.enable(option: SO_REUSEPORT, level: SOL_SOCKET)
+                try localAddress.withSockaddrPointer(localSocket!.bind)
+            }
+            try localSocket!.enable(option: IPV6_2292PKTINFO, level: IPPROTO_IPV6)
         }
+        
+        guard let localSocket else { return nil }
+        
+        let handle = try localSocket.duplicateDescriptor()
+        source = DispatchSource.makeReadSource(fileDescriptor: handle)
         source.setCancelHandler{[handle = source.handle] in
             Darwin.close(Int32(handle))
         }
     }
+    
+    // MARK: - Public methods
 
     /// Sends datagram to destination specified when transmitter created.
     /// - parameter data: payload of a datagram.
     /// - Throws: SocketError
     public func send(data: Data) throws {
         try self.socket.send(data)
+    }
+    
+    // MARK: - Private methods
+    
+    private static func getInterfaceFromIPv6LocalScope(_ sin6: sockaddr_in6) -> Interface? {
+        guard sin6.isLinkLocal else { return nil }
+        let index: Int32 = numericCast(sin6.sin6_scope_id)
+        return Interfaces.list().first(where: {
+            $0.index == index && !$0.ip6.isEmpty
+        })
+    }
+    
+    private static func findInterface(for sin: sockaddr_in) -> Interface? {
+        Interfaces.list().first(where: {$0.ip4.contains(sin.sin_addr)})
+    }
+    
+    private static func findInterface(for sin6: sockaddr_in6) -> Interface? {
+        Interfaces.list().first(where: {$0.ip6.contains(sin6.sin6_addr)})
     }
 }

@@ -1,0 +1,24 @@
+{
+  "originHash" : "d9be746305778e40c0413e7d30e57614194b1cf8200203f2ee148a7fa21622e0",
+  "pins" : [
+    {
+      "identity" : "interfaces",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/raisov/Interfaces.git",
+      "state" : {
+        "branch" : "main",
+        "revision" : "5d0ee430b73790bafb93c617056edc1ed74ff4ba"
+      }
+    },
+    {
+      "identity" : "sockets",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/raisov/Sockets.git",
+      "state" : {
+        "branch" : "main",
+        "revision" : "8a880394b7dc1f748d79a5d63b2c1c7c227a2f89"
+      }
+    }
+  ],
+  "version" : 3
+}

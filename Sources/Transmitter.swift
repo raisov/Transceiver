@@ -84,7 +84,7 @@ public class Transmitter {
                 try localSocket!.enable(option: SO_REUSEADDR, level: SOL_SOCKET)
                 try localSocket!.enable(option: SO_REUSEPORT, level: SOL_SOCKET)
                 try localAddress.withSockaddrPointer(localSocket!.bind)
-            } else if local_sin.isMulticast {
+            } else if sin.isMulticast {
                 try socket.enable(option: IP_MULTICAST_LOOP, level: IPPROTO_IP)
                 try socket.set(option: IP_MULTICAST_IFINDEX, level: IPPROTO_IP, value: interface.index)
                 try localSocket!.enable(option: SO_REUSEADDR, level: SOL_SOCKET)

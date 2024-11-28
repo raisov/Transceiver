@@ -81,7 +81,6 @@ public class Receiver {
         if addresses.isEmpty {
             try self.init(port: port, [])
         } else {
-            assert(addresses.count == 1)
             let address = addresses[0]
             try self.init(port: port, [address])
             assert(addresses.count == 1)

@@ -80,15 +80,17 @@ public struct Datagram {
             iov_base: buf_p.advanced(by: prefixLength),
             iov_len: maxDataLength
         )
-        self.msg = msghdr(
-            msg_name: buf_p.advanced(by: maxAncillaryLength),
-            msg_namelen: socklen_t(MemoryLayout<sockaddr_storage>.size),
-            msg_iov: &self.iov,
-            msg_iovlen: 1,
-            msg_control: buf_p,
-            msg_controllen: numericCast(maxAncillaryLength),
-            msg_flags: 0
-        )
+        self.msg = withUnsafeMutablePointer(to: &self.iov) {
+            msghdr(
+                msg_name: buf_p.advanced(by: maxAncillaryLength),
+                msg_namelen: socklen_t(MemoryLayout<sockaddr_storage>.size),
+                msg_iov: $0,
+                msg_iovlen: 1,
+                msg_control: buf_p,
+                msg_controllen: numericCast(maxAncillaryLength),
+                msg_flags: 0
+            )
+        }
         self.socket = try Socket(handle)
         self.iov.iov_len = try bsd(Darwin.recvmsg(handle, &self.msg, 0))
         assert(!self.ancillaryDataTruncated)

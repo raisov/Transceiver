@@ -98,11 +98,11 @@ public class Receiver {
                 
                 let socket = try Socket(Int32(source.handle))
                 
-                if let group = address.in?.sin_addr {
+                if let group = address.sin?.sin_addr {
                     try interfaces.filter { !$0.ip4.isEmpty }.forEach {interface in
                         try socket.joinToMulticast(group, interfaceIndex: interface.index)
                     }
-                } else if let group = address.in6?.sin6_addr {
+                } else if let group = address.sin6?.sin6_addr {
                     try interfaces.filter { !$0.ip6.isEmpty }.forEach {interface in
                         try socket.joinToMulticast(group, interfaceIndex: interface.index)
                     }

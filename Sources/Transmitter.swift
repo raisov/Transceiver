@@ -51,12 +51,12 @@ public class Transmitter {
             sockaddr_storage((interface?.broadcast ?? in_addr.broadcast).with(port: port))
         } else { return nil }
         
-        if let sin = address.in {
+        if address.sin != nil {
             self.socket = try Socket(family: .inet, type: .datagram)
             if let index = interface?.index {
                 try self.socket.set(option: IP_BOUND_IF, level: IPPROTO_IP, value: index)
             }
-        } else if let sin6 = address.in6 {
+        } else if let sin6 = address.sin6 {
             self.socket = try Socket(family: .inet6, type: .datagram)
             if let index = interface?.index ?? Self.getInterfaceFromIPv6LocalScope(sin6)?.index {
                 try self.socket.set(option: IPV6_BOUND_IF, level: IPPROTO_IPV6, value: index)
@@ -66,17 +66,17 @@ public class Transmitter {
         }
         
         self.socket.nonBlockingOperations = true
-        try address.withSockaddrPointer(try self.socket.connectTo)
+        try address.withSockaddrPointer(self.socket.connectTo)
     
     
         guard let localAddress = self.socket.localAddress else { return nil }
         
-        assert(address.in != nil && localAddress.in != nil ||
-               address.in6 != nil && localAddress.in6 != nil)
+        assert(address.sin != nil && localAddress.sin != nil ||
+               address.sin6 != nil && localAddress.sin6 != nil)
         
         var localSocket: Socket?
         
-        if let local_sin = localAddress.in, let sin = address.in {
+        if let local_sin = localAddress.sin, let sin = address.sin {
             localSocket = try Socket(family: .inet, type: .datagram)
             guard let interface = Self.findInterface(for: local_sin) else { return nil }
             if sin.sin_addr == in_addr.broadcast || sin.sin_addr == interface.broadcast {
@@ -94,7 +94,7 @@ public class Transmitter {
             try localSocket!.enable(option: IP_RECVIF, level: IPPROTO_IP) // 32
             try localSocket!.enable(option: IP_RECVDSTADDR, level: IPPROTO_IP) // 16
             try localSocket!.enable(option: IP_RECVPKTINFO, level: IPPROTO_IP) // 24
-        } else if let local_sin6 = localAddress.in, let sin6 = address.in {
+        } else if let local_sin6 = localAddress.sin6, let sin6 = address.sin6 {
             localSocket = try Socket(family: .inet6, type: .datagram)
             guard let interface = Self.findInterface(for: local_sin6) else { return nil }
             if sin6.isMulticast {

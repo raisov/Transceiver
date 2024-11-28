@@ -113,10 +113,10 @@ public struct Datagram {
 
     /// Datagram sender address.
     public var sender: sockaddr_storage? {
-        if let sin = self.msg.msg_name.assumingMemoryBound(to: sockaddr.self).in {
+        if let sin = self.msg.msg_name.assumingMemoryBound(to: sockaddr.self).sin {
             return sockaddr_storage(sin)
         }
-        if let sin6 = self.msg.msg_name.assumingMemoryBound(to: sockaddr.self).in6 {
+        if let sin6 = self.msg.msg_name.assumingMemoryBound(to: sockaddr.self).sin6 {
             return sockaddr_storage(sin6)
         }
         return nil
@@ -183,11 +183,11 @@ public struct Datagram {
         let localAddress = self.socket.localAddress!
         assert(self.sender != nil)
         guard let peer = self.sender else {return}
-        if let interface, let sin = localAddress.in, sin.isWildcard || sin.isMulticast {
+        if let interface, let sin = localAddress.sin, sin.isWildcard || sin.isMulticast {
             let replySocket = try Socket(family: .inet, type: .datagram)
             try replySocket.set(option: IP_BOUND_IF, level: IPPROTO_IP, value: interface.index)
             try peer.withSockaddrPointer { try replySocket.sendTo($0, data: data) }
-        } else if let interface, let sin6 = localAddress.in6, sin6.isWildcard || sin6.isMulticast {
+        } else if let interface, let sin6 = localAddress.sin6, sin6.isWildcard || sin6.isMulticast {
             let replySocket = try Socket(family: .inet6, type: .datagram)
             try replySocket.set(option: IPV6_BOUND_IF, level: IPPROTO_IPV6, value: interface.index)
             try peer.withSockaddrPointer { try replySocket.sendTo($0, data: data) }

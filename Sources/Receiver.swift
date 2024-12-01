@@ -5,6 +5,7 @@
 
 import Dispatch
 import Sockets
+import AddressFamily
 import Interfaces
 
 public class Receiver {
@@ -114,7 +115,7 @@ public class Receiver {
     /// You don't need to know about it, although it does all the work...
     private init(port: UInt16, _ addresses: [sockaddr_storage]) throws {
         self.sources = try addresses.compactMap {address -> Int32? in
-            guard let family = Socket.AddressFamily(
+            guard let family = AddressFamily(
                 rawValue: numericCast(address.ss_family)
             ) else { return nil }
             guard family == .inet || family == .inet6 else { return nil }

@@ -93,7 +93,7 @@ public class Receiver {
                         Array(Interfaces.list())
                     }
                 }().filter {
-                    $0.options.contains(.multicast) && !$0.options.contains(.pointopoint)
+                    $0.flags.contains(.multicast) && !$0.flags.contains(.pointopoint)
                 }
                 
                 let socket = try Socket(Int32(source.handle))

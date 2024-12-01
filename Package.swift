@@ -12,7 +12,7 @@ let package = Package(
             targets: ["Transceiver"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/raisov/Interfaces.git", branch: "main")
+        .package(url: "https://github.com/raisov/Interfaces.git", branch: "ex/definitions")
     ],
     targets: [
         .target(

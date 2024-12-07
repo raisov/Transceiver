@@ -130,16 +130,16 @@ public class Transmitter {
     private static func getInterfaceFromIPv6LocalScope(_ sin6: sockaddr_in6) -> Interface? {
         guard sin6.isLinkLocal else { return nil }
         let index: Int32 = numericCast(sin6.sin6_scope_id)
-        return Interfaces.list().first(where: {
+        return Interfaces().first(where: {
             $0.index == index && !$0.ip6.isEmpty
         })
     }
     
     private static func findInterface(for sin: sockaddr_in) -> Interface? {
-        Interfaces.list().first(where: {$0.ip4.contains(sin.sin_addr)})
+        Interfaces().first(where: {$0.ip4.contains(sin.sin_addr)})
     }
     
     private static func findInterface(for sin6: sockaddr_in6) -> Interface? {
-        Interfaces.list().first(where: {$0.ip6.contains(sin6.sin6_addr)})
+        Interfaces().first(where: {$0.ip6.contains(sin6.sin6_addr)})
     }
 }

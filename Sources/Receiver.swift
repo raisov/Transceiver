@@ -91,7 +91,7 @@ public class Receiver {
                     if let interface {
                         [interface]
                     } else {
-                        Array(Interfaces.list())
+                        Array(Interfaces())
                     }
                 }().filter {
                     $0.flags.contains(.multicast) && !$0.flags.contains(.pointopoint)

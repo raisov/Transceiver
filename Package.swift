@@ -1,4 +1,4 @@
-// swift-tools-version: 6.0
+// swift-tools-version: 5.10
 // The swift-tools-version declares the minimum version of Swift required to build this package.
 
 import PackageDescription
@@ -12,7 +12,7 @@ let package = Package(
             targets: ["Transceiver"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/raisov/Interfaces.git", branch: "ex/ftype"),
+        .package(url: "https://github.com/raisov/Interfaces.git", branch: "ex/swift5"),
     ],
     targets: [
         .target(

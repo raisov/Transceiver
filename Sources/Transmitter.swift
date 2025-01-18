@@ -19,7 +19,9 @@ public class Transmitter {
             self.source.suspend()
         }
         didSet {
-            guard let handler = delegate else {return}
+            guard let handler = delegate else {
+				source.cancel()
+				return}
             source.setEventHandler {[handler, source] in
                 let handle = Int32(source.handle)
                 let length = Int(source.data)

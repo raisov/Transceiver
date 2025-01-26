@@ -124,21 +124,21 @@ public class Transmitter {
         } else { return nil }
         
         if address.sin != nil {
-            self.socket = try Socket(family: .inet, type: .datagram)
+            socket = try Socket(family: .inet, type: .datagram)
             if let index = interface?.index {
-                try self.socket.set(option: IP_BOUND_IF, level: IPPROTO_IP, value: index)
+                try socket.set(option: IP_BOUND_IF, level: IPPROTO_IP, value: index)
             }
         } else if let sin6 = address.sin6 {
-            self.socket = try Socket(family: .inet6, type: .datagram)
+            socket = try Socket(family: .inet6, type: .datagram)
             if let index = interface?.index ?? Self.getInterfaceFromIPv6LocalScope(sin6)?.index {
-                try self.socket.set(option: IPV6_BOUND_IF, level: IPPROTO_IPV6, value: index)
+                try socket.set(option: IPV6_BOUND_IF, level: IPPROTO_IPV6, value: index)
             }
         } else {
             return nil
         }
         
-        self.socket.nonBlockingOperations = true
-        try address.withSockaddrPointer(self.socket.connectTo)
+        socket.nonBlockingOperations = true
+        try address.withSockaddrPointer(socket.connectTo)
 	}
 
 	deinit {
@@ -151,7 +151,7 @@ public class Transmitter {
     /// - parameter data: payload of a datagram.
     /// - Throws: SocketError
     public func send(data: Data) throws {
-        try self.socket.send(data)
+        try socket.send(data)
     }
     
     // MARK: - Private methods

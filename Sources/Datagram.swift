@@ -173,7 +173,7 @@ public struct Datagram {
             }
             return 0
         }()
-        return Interfaces.list().first{$0.index == index}
+        return Interfaces().first{$0.index == index}
     }
 
     /// Sends a rеsponce to this datagram.
